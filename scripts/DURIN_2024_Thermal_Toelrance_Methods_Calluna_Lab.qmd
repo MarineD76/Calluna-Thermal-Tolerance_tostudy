@@ -87,7 +87,7 @@ DURIN_data %>%
   theme_bw() +
   labs(x = "Temperature (Celsius)", y = "FvFm", color = "Exposure Time (minutes)"))
 
-ggsave(plot = Temp_Curve_Plot, filename = "C:/Users/sge010/OneDrive - University of Bergen/Documents/DURIN/Durin_data_project/output/ThermalTolerance_CV_Curves.png", height = 12, width = 25, units = "cm")
+ggsave(plot = Temp_Curve_Plot, filename = here("output/ThermalTolerance_CV_Curves.png"), height = 12, width = 25, units = "cm")
 ```
 
 #### Function to calculate T50 metrics
@@ -108,8 +108,9 @@ psiiht.durin <- function(Temperature, FvFm, control.temp, id, TempExpTime, plot.
                    {
   l1 <- list(control.temp = control.temp, plot.est = plot.est, boots = boots)
   HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, TempExpTime = TempExpTime) 
+
   
-  return(do.call("rbind", by(HTdf, by(HTdf, list(HTdf$id,HTdf$TempExpTime)), function(df) {
+  return(do.call("rbind", by(HTdf, list(HTdf$id,HTdf$TempExpTime), function(df) {
     Temperature <- df$Temperature
     FvFm <- df$FvFm
     id <- df$id
@@ -292,13 +293,14 @@ psiiht.durin(Temperature = DURIN_data_subset$TempExp,
        plot.est = T,
        boots = 9) ## includes plant_nr
 
+#Marine : replace DURIN_Methods$TempExpTime by reform_dataset$PlantSampleID
 T50metrics <- psiiht(Temperature = DURIN_data_subset$TempExp,
                      FvFm = DURIN_data_subset$FvFm_Final,
                      control.temp = 20,
-                     id = DURIN_data_subset$species,
+                     id = reform_dataset$PlantSampleID,# this is unique per sample
                      TempExpTime = DURIN_data_subset$TempExpTime,
                      # plant_nr = DURIN_data_subset$plant_nr,
-                     plot.est = T,
+                     plot.est = TRUE,
                      boots = 9) 
 
 
