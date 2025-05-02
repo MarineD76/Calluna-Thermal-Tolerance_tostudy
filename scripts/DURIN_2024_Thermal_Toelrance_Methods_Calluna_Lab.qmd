@@ -93,6 +93,7 @@ ggsave(plot = Temp_Curve_Plot, filename = here("output/ThermalTolerance_CV_Curve
 #### Function to calculate T50 metrics
 
 ```{r}
+# Marine : this chunck doesn't work, (error : FUN argument missing). I tried to change some lines but it still doesn't work
 
 # Adapted from Feeley and Perez 2020 Paper.
 #Thanks for checking out this code for estimating heat tolerances using variable fluorescence!
