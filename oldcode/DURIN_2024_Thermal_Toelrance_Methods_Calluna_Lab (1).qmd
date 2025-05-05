@@ -611,20 +611,46 @@ library(car)
 
 ```{r}
 
+
 psiiht=function( Temperature, FvFm, control.temp, id, plot.est, boots){
-  l1=list(control.temp=control.temp, plot.est=plot.est, boots=boots)
-  attach(l1)
+  #l1=list(control.temp=control.temp, plot.est=plot.est, boots=boots)
+  #attach(l1)
   HTdf=data.frame(Temperature=Temperature, FvFm=FvFm, id=id)
   
+
  return(do.call("rbind", by(HTdf, list(HTdf$id), function(df){
    Temperature=df[,which(colnames(df)=="Temperature")]
    FvFm=df[,which(colnames(df)=="FvFm")]
    id=df[,which(colnames(df)=="id")]
-   #get parameter estimates for logistic decay model
-   cof=coef(lm(logit(FvFm)~Temperature)) 
-   #Fit a non linear least squares model to the FvFm and Temperature data
-   HT.model <- nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
-                   trace=F, control=list(maxiter=1000, tol=1e-3))
+   
+   #Marine (Add a pre-check for bad data, before trying to fit)
+   if (length(unique(FvFm)) < 4 || length(na.omit(FvFm)) < 5 || all(FvFm < 0.05)) {
+  return(data.frame(id = unique(id), Tcrit.mn = NA, T50.mn = NA, T95.mn = NA))
+}
+   
+   #Marine : get parameter estimates for logistic decay model
+   safe_logit <- function(x) log((x + 1e-6) / (1 - x + 1e-6))
+   #cof = coef(lm(safe_logit(FvFm) ~ Temperature))
+   cof <- tryCatch({
+  coef(lm(safe_logit(FvFm) ~ Temperature))
+}, error = function(e) c(0, 0))  # fallback to zeros
+   
+   #Marine : Fit a non linear least squares model to the FvFm and Temperature data
+   #HT.model <- nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+                   #trace=F, control=list(maxiter=1000, tol=1e-3))
+   HT.model <- tryCatch({
+  nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),
+      start = list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
+      trace = FALSE, control = list(maxiter = 1000, tol = 1e-3))
+}, error = function(e) NULL)
+
+if (is.null(HT.model)) {
+  return(data.frame(id = unique(id), Tcrit.mn = NA, T50.mn = NA, T95.mn = NA))
+}
+   
+   
+   
+   
    
    #Use the parameter estimates (coef(HT.model)[#])from the HT.model to predict a new fit based on a heat treatments from 23-62 degrees celcius. Here, # = 1:3.
    y<-coef(HT.model)[1]/(1+exp(-(coef(HT.model)[2]+coef(HT.model)[3]*seq(23,62)))) 
@@ -703,7 +729,7 @@ psiiht=function( Temperature, FvFm, control.temp, id, plot.est, boots){
                      #T95.uci=round(T95.ci[[2]],1)))
    ))
  })))
-  detach(l1)
+  #detach(l1)
 }
 
 
@@ -711,11 +737,11 @@ psiiht=function( Temperature, FvFm, control.temp, id, plot.est, boots){
 DURIN_data$FvFm_Final <- as.numeric(as.character(DURIN_data$FvFm_Final))
 
 # Create concantenated ID code for the plants
-DURIN_Methods$PlantSampleID = paste("P", DURIN_Methods$plant_nr, "_T", DURIN_Methods$TempExpTime) ## plant before time
+DURIN_data_subset$PlantSampleID = paste("P", DURIN_data_subset$plant_nr, "_T", DURIN_data_subset$TempExpTime) ## plant before time
 
-DURIN_Methods$PlantSampleID = paste("T", DURIN_Methods$TempExpTime, "_P", DURIN_Methods$plant_nr) ## time before plant
+DURIN_data_subset$PlantSampleID = paste("T", DURIN_data_subset$TempExpTime, "_P", DURIN_data_subset$plant_nr) ## time before plant
 
-reform_dataset <- DURIN_Methods %>% 
+reform_dataset <- DURIN_data_subset %>% 
   dplyr::select(PlantSampleID, TempExp, FvFm_Final)
 
 ## Run the function
@@ -723,7 +749,7 @@ reform_dataset <- DURIN_Methods %>%
 
 psiiht(Temperature=reform_dataset$TempExp, FvFm=reform_dataset$FvFm_Final, control.temp=20, id=reform_dataset$PlantSampleID, plot.est=T, boots=5) # call the function using the concatenated ID as the "id" argument
 
-T50_new_metrics <- psiiht(Temperature=DURIN_Methods$TempExp, FvFm=DURIN_Methods$FvFm_Final, control.temp=20, id=DURIN_Methods$TempExpTime, plot.est=T, boots=5)
+T50_new_metrics <- psiiht(Temperature=DURIN_data_subset$TempExp, FvFm=DURIN_data_subset$FvFm_Final, control.temp=20, id=DURIN_data_subset$TempExpTime, plot.est=T, boots=5)
 ```
 
 #### Different treatment datasets
@@ -733,37 +759,37 @@ T50_new_metrics <- psiiht(Temperature=DURIN_Methods$TempExp, FvFm=DURIN_Methods$
 
 # Step 0: convert the "id" column (which is going to be the PlantNr) into a factor
 
-DURIN_Methods$plant_nr <- as.factor(as.character(DURIN_Methods$plant_nr))
-str(DURIN_Methods)
+DURIN_data_subset$plant_nr <- as.factor(as.character(DURIN_data_subset$plant_nr))
+str(DURIN_data_subset)
 
-levels(DURIN_Methods$plant_nr)  # shows the different factor levels in their default order
+levels(DURIN_data_subset$plant_nr)  # shows the different factor levels in their default order
 
 
 # Step 1: split the 5 different Time Treatment datasets
 
-T1_dataset <- DURIN_Methods %>% 
+T1_dataset <- DURIN_data_subset %>% 
   dplyr::filter(TempExpTime == "1") %>% 
   dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
   dplyr::rename(PlantNr = plant_nr)
 
 str(T1_dataset)
 
-T5_dataset <- DURIN_Methods %>% 
+T5_dataset <- DURIN_data_subset %>% 
   dplyr::filter(TempExpTime == "5") %>% 
   dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
   dplyr::rename(PlantNr = plant_nr)
 
-T10_dataset <- DURIN_Methods %>% 
+T10_dataset <- DURIN_data_subset %>% 
   dplyr::filter(TempExpTime == "10") %>% 
   dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
   dplyr::rename(PlantNr = plant_nr)
 
-T15_dataset <- DURIN_Methods %>% 
+T15_dataset <- DURIN_data_subset %>% 
   dplyr::filter(TempExpTime == "15") %>% 
   dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
   dplyr::rename(PlantNr = plant_nr)
 
-T20_dataset <- DURIN_Methods %>% 
+T20_dataset <- DURIN_data_subset %>% 
   dplyr::filter(TempExpTime == "20") %>% 
   dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %>% 
   dplyr::rename(PlantNr = plant_nr)
