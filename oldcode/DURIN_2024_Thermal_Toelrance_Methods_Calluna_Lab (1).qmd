@@ -121,10 +121,10 @@ ggsave(plot = Temp_Curve_Plot, filename = here("output/ThermalTolerance_CV_Curve
 # Function to estimate T50 of FvFm
 # Note 'HTdf' is the template dataset used in the function by the original authors.
 
-psiiht.durin <- function(Temperature, FvFm, control.temp, id, TempExpTime, plot.est, boots) 
+psiiht.durin <- function(Temperature, FvFm, control.temp, id, plant_nr, TempExpTime, plot.est, boots) 
                    {
   l1 <- list(control.temp = control.temp, plot.est = plot.est, boots = boots)
-  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, TempExpTime = TempExpTime) 
+  HTdf <- data.frame(Temperature = Temperature, FvFm = FvFm, id = id, plant_nr = plant_nr, TempExpTime = TempExpTime) 
   
   return(do.call("rbind", by(HTdf, list(HTdf$id,HTdf$TempExpTime), function(df) {
     Temperature <- df$Temperature
@@ -270,7 +270,7 @@ if(plot.est == TRUE) {
         
     if(length(unique(id)) > 0 && length(unique(TempExpTime)) > 0) {
       return(data.frame(id = unique(id),
-                        # plant_nr = unique(plant_nr),
+                        plant_nr = unique(plant_nr),
                         TempExpTime = unique(TempExpTime),
                         Tcrit.mn = round(na.omit(Tcrit), 1),  
                         T50.mn = round(na.omit(T50), 1),  
@@ -304,7 +304,7 @@ psiiht.durin(Temperature = DURIN_data_subset$TempExp,
        FvFm = DURIN_data_subset$FvFm_Final,
        control.temp = 20,
        id = DURIN_data_subset$species,
-       #plant_nr = DURIN_data_subset$plant_nr,
+       plant_nr = DURIN_data_subset$plant_nr,
        TempExpTime = DURIN_data_subset$TempExpTime,
        plot.est = T,
        boots = 9) ## includes plant_nr
@@ -314,7 +314,7 @@ T50metrics <- psiiht.durin(Temperature = DURIN_data_subset$TempExp,
                      control.temp = 20,
                      id = DURIN_data_subset$species,
                      TempExpTime = DURIN_data_subset$TempExpTime,
-                     # plant_nr = DURIN_data_subset$plant_nr,
+                     plant_nr = DURIN_data_subset$plant_nr,
                      plot.est = T,
                      boots = 9) 
 
@@ -336,10 +336,10 @@ Next, we want to know if there is a significative difference between the T50 val
 ## Clean the dataset (select just the T50)
 T50_clean <- T50metrics %>% 
   dplyr::select(id,
-                #plant_nr,
-                T50.mn) %>% 
+                plant_nr,
+                T50.mn,TempExpTime) %>% 
   dplyr::rename(c("TimeTreatment" = "id",
-                  # "PlantNr" = "plant_nr",
+                  "PlantNr" = "plant_nr",
                   "T50" = "T50.mn" )) %>%   na.omit()
 
 ```
@@ -535,13 +535,11 @@ library(lme4)
 ## Use {emmeans} to estimate marginal means.
 
 T50.lm <- lm(T50.mn ~ TempExpTime, data = T50metrics) # linear model
-T50.lmer <- lmer(T50.mn ~ TempExpTime + (1|PlantNr), data = T50metrics) # mixed model
+T50.lmer <- lmer(T50.mn ~ TempExpTime + (1| plant_nr), data = T50metrics) # mixed model
 
 T50.emm <- emmeans(T50.lm, "TempExpTime") # lm emmeans
 T50.emm
 
-install.packages("pbkrtest")
-install.packages("lmerTest")
 T50.emm2 <- emmeans(T50.lmer, "TempExpTime") # mm emmeans
 T50.emm2
 
