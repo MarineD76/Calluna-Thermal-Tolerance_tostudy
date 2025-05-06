@@ -503,7 +503,8 @@ Now let's plot our graph:
                                     y = average_T50, fill = TempExpTime),
                                 size = 3) +
                  scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
-                 labs(x = "Exposure Time (Minutes)",
+                 labs(title = "Effect of Exposure Time on Average T50 Value(old graph)",
+                      x = "Exposure Time (Minutes)",
                       y = "Average T50 value (ºC)",
                       fill = "Exposure Time (Minutes)") + 
                  theme_bw())
@@ -665,33 +666,52 @@ if (is.null(HT.model)) {
      #print(k)
      srows <- sample(1:length(Temperature), length(Temperature),TRUE)
      
-     if(class(try(nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3*Temperature[srows]))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
-                      trace=F, control=list(maxiter=1000, tol=1e-3)), silent=T)[[1]])=="nlsModel")
-     {HT.model2 <- nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3*Temperature[srows]))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
-                       trace=F, control=list(maxiter=1000, tol=1e-6))
-     predict.boot[,k]=coef(HT.model2)[1]/(1+exp(-(coef(HT.model2)[2]+coef(HT.model2)[3]*seq(23,62)))) 
-     #Estimate T95
-     T95[k]=(-log((coef(HT.model2)[1]/nine5)-1)-coef(HT.model2)[2])/coef(HT.model2)[3] 
-     
-     #Estimate T50
-     T50[k]=(-log((coef(HT.model2)[[1]]/half)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]]
-     T50k=(-log((coef(HT.model2)[[1]]/half)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]]
-     #Use model to predict changes in FvFm & make new dataframe
-     predict=data.frame(x=seq(23,62),y=coef(HT.model2)[1]/(1+exp(-(coef(HT.model2)[2]+coef(HT.model2)[3]*seq(23,62)))) ) #create a dataframe of predictions
-     df1=cbind(predict[-1,], predict[-nrow(predict),])[,c(3,1,4,2)]
-     #Use new dataframe to estimate the slope at between each 1-degree interval
-     df1$slp=as.vector(apply(df1, 1, function(x) summary(lm((x[3:4]) ~ x[1:2])) [[4]][[2]] ))
-     slp.at.tcrit=round(min(df1$slp), 3)*.15 #Determine where slope is 15% of max slope & round
-     #Estimate the FvFm at which the slope is 15% of max slope & less than T50
-     fvfv.at.tcrit=df1[which(abs(df1[which(df1[,1]<T50k),]$slp-slp.at.tcrit)==min(abs(df1[which(df1[,1]<T50k),]$slp-slp.at.tcrit))),][1,3]
-     Tcrit[k]=(-log((coef(HT.model2)[[1]]/fvfv.at.tcrit)-1)-coef(HT.model2)[[2]])/coef(HT.model2)[[3]] # Estimate the temperatureat which the slope is 15% of max slope
-     
-     }else{(class(try(nls(FvFm ~ theta1/(1 + exp(-(theta2 + theta3*Temperature))),  start=list(theta1 = .8, theta2 = cof[1], theta3 = cof[2]),
-                          data=data2[srows,], trace=F, control=list(maxiter=1000, tol=1e-3)), silent=T)[[1]])=="list")
-       predict.boot[,k]=NA
-       T95[k]=NA
-       T50[k]=NA
-       Tcrit[k]=NA }}
+     #Marine (replace the entire previous if block with that :)
+     # Try fitting the model inside the bootstrap
+HT.model2 <- tryCatch({
+  nls(FvFm[srows] ~ theta1/(1 + exp(-(theta2 + theta3 * Temperature[srows]))),
+      start = list(theta1 = 0.8, theta2 = cof[1], theta3 = cof[2]),
+      trace = FALSE,
+      control = list(maxiter = 1000, tol = 1e-6))
+}, error = function(e) NULL)
+
+if (!is.null(HT.model2)) {
+  predict.boot[,k] = coef(HT.model2)[1] / (1 + exp(-(coef(HT.model2)[2] + coef(HT.model2)[3] * seq(23,62)))) 
+  
+  #Estimate T95
+  T95[k] = (-log((coef(HT.model2)[1] / nine5) - 1) - coef(HT.model2)[2]) / coef(HT.model2)[3]
+  
+  #Estimate T50
+  T50[k] = (-log((coef(HT.model2)[[1]] / half) - 1) - coef(HT.model2)[[2]]) / coef(HT.model2)[[3]]
+  T50k = T50[k]
+  
+  #Use model to predict changes in FvFm & make new dataframe
+  predict = data.frame(
+    x = seq(23,62),
+    y = coef(HT.model2)[1] / (1 + exp(-(coef(HT.model2)[2] + coef(HT.model2)[3] * seq(23,62))))
+  ) #create a dataframe of predictions
+  
+  df1 = cbind(predict[-1,], predict[-nrow(predict),])[,c(3,1,4,2)]
+  
+  #Use new dataframe to estimate the slope at between each 1-degree interval
+  df1$slp = as.vector(apply(df1, 1, function(x) summary(lm(x[3:4] ~ x[1:2]))[[4]][[2]] ))
+  slp.at.tcrit = round(min(df1$slp), 3) * 0.15 #Determine where slope is 15% of max slope & round
+  
+  #Estimate the FvFm at which the slope is 15% of max slope & less than T50
+  fvfv.at.tcrit = df1[
+    which(abs(df1[which(df1[,1] < T50k),]$slp - slp.at.tcrit) == 
+              min(abs(df1[which(df1[,1] < T50k),]$slp - slp.at.tcrit)))
+  ,][1,3]
+  
+  # Estimate the temperature at which the slope is 15% of max slope
+  Tcrit[k] = (-log((coef(HT.model2)[[1]] / fvfv.at.tcrit) - 1) - coef(HT.model2)[[2]]) / coef(HT.model2)[[3]]
+  
+} else {
+  predict.boot[,k] = NA
+  T95[k] = NA
+  T50[k] = NA
+  Tcrit[k] = NA
+}}
    
    FvFm.boot=t(apply(predict.boot, 1, function(x){quantile(x,c(0.025,0.975),na.rm=T)}))
    
@@ -752,6 +772,62 @@ psiiht(Temperature=reform_dataset$TempExp, FvFm=reform_dataset$FvFm_Final, contr
 T50_new_metrics <- psiiht(Temperature=DURIN_data_subset$TempExp, FvFm=DURIN_data_subset$FvFm_Final, control.temp=20, id=DURIN_data_subset$TempExpTime, plot.est=T, boots=5)
 ```
 
+### Marine : Plot with the new psiiht function
+
+```{r}
+summary_stats_new <- T50metrics %>%
+                 group_by(TempExpTime) |>
+                 dplyr::summarise(n = n(),  # Calculating sample size n
+                           average_T50 = mean(T50.mn),  
+                           # Calculating mean hatching time
+                           SD = sd(T50.mn))%>%  # Calculating standard deviation
+                 mutate(SE = SD / sqrt(n))  # Calculating standard error
+
+```
+
+Now let's plot the graph:
+
+```{r}
+# Making a barplot
+(T50_barplot_1 <- ggplot(data = summary_stats_new) +                                  
+                   geom_bar(aes(x = factor(TempExpTime), y = average_T50,
+                               fill = factor(TempExpTime)),
+                               stat = "identity", colour = "black") +               
+                   geom_errorbar(aes(x = factor(TempExpTime), ymin = average_T50 - SE,
+                                     ymax = average_T50 + SE), width = 0.2,
+                                     colour="black", alpha=0.9, size=1) +  
+                                     # Adding standard error bars        
+                 scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
+                   labs(x = "Time treatment (minutes)", y = " Average T50 value (ºC)") +
+                       # caption = "\nFig.3 Forgspawn exposed to lowest temperature (13°C) was
+                       # the slowest to hatch. Non-overlapping S.E. bars indicate significant
+                       #differences among mean groups. n = 60.") +
+                       # caption = "\nFig.3") +  # Adding caption for figure in panel
+                   theme_bw() +                                              
+                   theme(legend.position = "none"))
+
+## Making a boxplot
+
+
+(time_boxplot2 <- ggplot(summary_stats_new) +
+     geom_errorbar(aes(x = factor(TempExpTime), ymin = average_T50 - SE,
+                                     ymax = average_T50 + SE),
+                   width = 0.2,
+                   colour = "black",
+                   alpha = 0.9,
+                   size = 0.5) + 
+                     geom_point(aes(x = factor(TempExpTime),
+                                    y = average_T50, fill = factor(TempExpTime)),
+                                size = 3) +
+                 scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
+                 labs(title = "Effect of Exposure Time on Average T50 Value(new graph)", 
+                      x = "Exposure Time (Minutes)",
+                      y = "Average T50 value (ºC)",
+                      fill = "Exposure Time (Minutes)") + 
+                 theme_bw())
+
+```
+
 #### Different treatment datasets
 
 ```{r}
@@ -809,7 +885,8 @@ T20_metrics <- psiiht(Temperature=T20_dataset$TempExp, FvFm=T20_dataset$FvFm_Fin
 
 # Step 2B: call the function (modified by DURIN) per each dataset (id is going to be the PlantNr)
 
-T5_metrics <- psiiht.durin(Temperature=T5_dataset$TempExp, FvFm=T5_dataset$FvFm_Final, control.temp=20, id=T5_dataset$PlantNr, TempExpTime=T5_dataset$TempExpTime, plot.est=T, boots=3)
+
+T5_metrics <- psiiht.durin(Temperature=T5_dataset$TempExp, FvFm=T5_dataset$FvFm_Final, control.temp=20, id=T5_dataset$PlantNr, TempExpTime=T5_dataset$TempExpTime, plot.est=TRUE, boots=3)
 
 T10_metrics <- psiiht.durin(Temperature=T10_dataset$TempExp, FvFm=T10_dataset$FvFm_Final, control.temp=20, id=T10_dataset$PlantNr, TempExpTime=T10_dataset$TempExpTime, plot.est=T, boots=3)
 
@@ -819,3 +896,231 @@ T20_metrics <- psiiht.durin(Temperature=T20_dataset$TempExp, FvFm=T20_dataset$Fv
 
 
 ```
+
+\
+
+{r}
+
+\## Run the function per each treatment (i. e. treatment T1 per all the 9 plants,
+
+treatment T5 per all the 9 plants, etc)
+
+\# Step 0: convert the "id" column (which is going to be the PlantNr) into a factor
+
+DURIN_data_subset\$plant_nr \<- as.factor(as.character(DURIN_data_subset\$plant_nr))
+
+str(DURIN_data_subset)
+
+levels(DURIN_data_subset\$plant_nr) \# shows the different factor levels in their
+
+default order
+
+\# Step 1: split the 5 different Time Treatment datasets
+
+T1_dataset \<- DURIN_data_subset %\>%
+
+dplyr::filter(TempExpTime == "1") %\>%
+
+dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %\>%
+
+dplyr::rename(PlantNr = plant_nr)
+
+str(T1_dataset)
+
+T5_dataset \<- DURIN_data_subset %\>%
+
+dplyr::filter(TempExpTime == "5") %\>%
+
+dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %\>%
+
+dplyr::rename(PlantNr = plant_nr)
+
+T10_dataset \<- DURIN_data_subset %\>%
+
+dplyr::filter(TempExpTime == "10") %\>%
+
+dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %\>%
+
+dplyr::rename(PlantNr = plant_nr)
+
+T15_dataset \<- DURIN_data_subset %\>%
+
+dplyr::filter(TempExpTime == "15") %\>%
+
+dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %\>%
+
+dplyr::rename(PlantNr = plant_nr)
+
+T20_dataset \<- DURIN_data_subset %\>%
+
+dplyr::filter(TempExpTime == "20") %\>%
+
+dplyr::select(plant_nr, TempExpTime, TempExp, FvFm_Final) %\>%
+
+dplyr::rename(PlantNr = plant_nr)
+
+\# Step 2: call the function per each dataset (id is going to be the PlantNr)
+
+T1_metrics \<- psiiht(Temperature=T1_dataset\$TempExp, FvFm=T1_dataset\$FvFm_Final,
+
+control.temp=20, id=T1_dataset\$PlantNr, plot.est=T, boots=5)
+
+T5_metrics \<- psiiht(Temperature=T5_dataset\$TempExp, FvFm=T5_dataset\$FvFm_Final,
+
+control.temp=20, id=T5_dataset\$PlantNr, plot.est=T, boots=5)
+
+T10_metrics \<- psiiht(Temperature=T10_dataset\$TempExp, FvFm=T10_dataset\$FvFm_Final,
+
+control.temp=20, id=T10_dataset\$PlantNr, plot.est=T, boots=10)
+
+T15_metrics \<- psiiht(Temperature=T15_dataset\$TempExp, FvFm=T15_dataset\$FvFm_Final,
+
+control.temp=20, id=T15_dataset\$PlantNr, plot.est=T, boots=9)
+
+T20_metrics \<- psiiht(Temperature=T20_dataset\$TempExp, FvFm=T20_dataset\$FvFm_Final,
+
+control.temp=20, id=T20_dataset\$PlantNr, plot.est=T, boots=5)
+
+\# Step 2B: call the function (modified by DURIN) per each dataset (id is going to
+
+be the PlantNr)
+
+T5_metrics \<- psiiht.durin(Temperature=T5_dataset\$TempExp, FvFm
+
+=T5_dataset\$FvFm_Final, control.temp=20, id=T5_dataset\$PlantNr, TempExpTime
+
+=T5_dataset\$TempExpTime, plot.est=TRUE, boots=3, plant_nr = T5_dataset\$PlantNr)
+
+T10_metrics \<- psiiht.durin(Temperature=T10_dataset\$TempExp, FvFm
+
+=T10_dataset\$FvFm_Final, control.temp=20, id=T10_dataset\$PlantNr, TempExpTime
+
+=T10_dataset\$TempExpTime, plot.est=T, boots=3, plant_nr = T10_dataset\$PlantNr)
+
+T15_metrics \<- psiiht.durin(Temperature=T15_dataset\$TempExp, FvFm
+
+=T15_dataset\$FvFm_Final, control.temp=20, id=T15_dataset\$PlantNr, plot.est=T, boots
+
+=3, plant_nr = T15_dataset\$PlantNr)
+
+T20_metrics \<- psiiht.durin(Temperature=T20_dataset\$TempExp, FvFm
+
+=T20_dataset\$FvFm_Final, control.temp=20, id=T20_dataset\$PlantNr, TempExpTime
+
+=T20_dataset\$TempExpTime, plot.est=T, boots=3, plant_nr = T20_dataset\$PlantNr)
+
+![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAkCAYAAAD7PHgWAAABpklEQVR4Xu2VsU7CQBzGmVx8BUeegIEHkIaOLjjpTIAuPAJONp0d9BmIE3EjroRITDfciAnQ0tCIRgNqzNkPe1rvFNqjaRnuS740tLnv+7V3+ZPJSElJSW2farVatlqtHnvXhufTiG74a7NsbiyqVCqqruvnpmnejcfjheM4JIqxBmuRgSw2fyPhrQ3DuPBK5mxxVCMDWbF+SWwN3p4tEzWykMn2CAvnR2Rb/7NlWa8e4AnbIywcctu2SZxGJtsjLIT1+30Sp4UBi8XivqqqdcbtZvOSBN3r3ZK39w9hCwMCiIQQIJ9f5lxxWAsD0i84HDlklQE4caZccVgLA0KFQkFZBwnA4cjiisN6I0CIQtoTl4NLHZBuM86a6z5ycKkChoFLDXAV3BcQ+ztBwFVwmIOt1tUvyEQB18DVFUVpDQb3pNPpfkMmCkjhpu6Mg8vlckelUumMDuVu92YJ125fJzcH/xrOFM57vFcul41gOGAfZk/J/pMEh3MQzvMOwtiCTR0ZEKKQ+Xz+MOPD4f7WAPoC1K5/XUrTtAMExmlk/lRKSUlJJa5PbK0yKomJVB4AAAAASUVORK5CYII= "Show in New Window")
+
+```         
+tibble [360 × 6] (S3: tbl_df/tbl/data.frame)
+ $ species      : chr [1:360] "Calluna vulgaris" "Calluna vulgaris" "Calluna vulgaris" "Calluna vulgaris" ...
+ $ plant_nr     : Factor w/ 9 levels "1","2","3","4",..: 1 2 3 1 2 3 1 2 3 1 ...
+ $ TempExpTime  : num [1:360] 1 1 1 1 1 1 1 1 1 1 ...
+ $ TempExp      : num [1:360] 20 20 20 30 30 30 34 34 34 38 ...
+ $ FvFm_Final   : num [1:360] 0.78 0.81 0.79 0.76 0.74 0.74 0.78 0.8 0.8 0.8 ...
+ $ PlantSampleID: chr [1:360] "Calluna vulgaris_1" "Calluna vulgaris_2" "Calluna vulgaris_3" "Calluna vulgaris_1" ...
+[1] "1" "2" "3" "4" "5" "6" "7" "8" "9"
+tibble [72 × 4] (S3: tbl_df/tbl/data.frame)
+ $ PlantNr    : Factor w/ 9 levels "1","2","3","4",..: 1 2 3 1 2 3 1 2 3 1 ...
+ $ TempExpTime: num [1:72] 1 1 1 1 1 1 1 1 1 1 ...
+ $ TempExp    : num [1:72] 20 20 20 30 30 30 34 34 34 38 ...
+ $ FvFm_Final : num [1:72] 0.78 0.81 0.79 0.76 0.74 0.74 0.78 0.8 0.8 0.8 ...
+    theta1     theta2     theta3 
+ 0.7789359 14.4251402 -0.2865522 
+Erreur dans data.frame(id = unique(id), plant_nr = unique(plant_nr), TempExpTime = unique(TempExpTime),  : 
+  les arguments impliquent des nombres de lignes différents : 1, 9, 2
+```
+
+R Console
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000218.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000219.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00021a.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00021b.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00021c.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00021d.png)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00021f.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000220.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000221.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000222.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000223.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000224.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000225.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000226.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000227.png)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000229.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00022a.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00022b.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00022c.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00022d.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00022e.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00022f.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000230.png)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000232.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000233.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000234.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000235.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000236.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000237.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000238.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000239.png)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00023b.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00023c.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00023d.png?fixed_size=1)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/00023e.png)
+
+![](http://127.0.0.1:16267/chunk_output/D666F7FE584d976d/BA7879AF/cmxbatfqwne2f/000241.png?fixed_size=1)
+
+```         
+tibble [360 × 6] (S3: tbl_df/tbl/data.frame)
+ $ species      : chr [1:360] "Calluna vulgaris" "Calluna vulgaris" "Calluna vulgaris" "Calluna vulgaris" ...
+ $ plant_nr     : Factor w/ 9 levels "1","2","3","4",..: 1 2 3 1 2 3 1 2 3 1 ...
+ $ TempExpTime  : num [1:360] 1 1 1 1 1 1 1 1 1 1 ...
+ $ TempExp      : num [1:360] 20 20 20 30 30 30 34 34 34 38 ...
+ $ FvFm_Final   : num [1:360] 0.78 0.81 0.79 0.76 0.74 0.74 0.78 0.8 0.8 0.8 ...
+ $ PlantSampleID: chr [1:360] "Calluna vulgaris_1" "Calluna vulgaris_2" "Calluna vulgaris_3" "Calluna vulgaris_1" ...
+[1] "1" "2" "3" "4" "5" "6" "7" "8" "9"
+tibble [72 × 4] (S3: tbl_df/tbl/data.frame)
+ $ PlantNr    : Factor w/ 9 levels "1","2","3","4",..: 1 2 3 1 2 3 1 2 3 1 ...
+ $ TempExpTime: num [1:72] 1 1 1 1 1 1 1 1 1 1 ...
+ $ TempExp    : num [1:72] 20 20 20 30 30 30 34 34 34 38 ...
+ $ FvFm_Final : num [1:72] 0.78 0.81 0.79 0.76 0.74 0.74 0.78 0.8 0.8 0.8 ...
+    theta1     theta2     theta3 
+ 0.7789359 14.4251402 -0.2865522 
+```
+
+![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAAfElEQVR4XmNgwAXWv8sEY4rA2vd+DOve/wFjEJsssOGjOdCA/ygYJEYS2PhRBcMQGAbJEQVWfRbF0IyOQWrwgs3PuDA04cIgtVjBqv/MGIoJYZAeDICuiFhMEKBrIFojOkA3YAQYhAvjBOgKCWGcAF0hIYwToCskhActAAATrGcoccG/iQAAAABJRU5ErkJggg==){alt=""} Show Traceback
