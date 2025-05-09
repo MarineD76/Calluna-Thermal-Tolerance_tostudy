@@ -492,16 +492,15 @@ Now let's plot our graph:
 ## Making a boxplot
 
 
-(time_boxplot2 <- ggplot(summary_stats) +
-     geom_errorbar(aes(x = TempExpTime, ymin = average_T50 - SE,
+(time_boxplot2 <- ggplot(summary_stats, 
+                         aes(x = TempExpTime)) +
+     geom_pointrange(aes( y = average_T50, ymin = average_T50 - SE,
                                      ymax = average_T50 + SE),
-                   width = 0.2,
                    colour = "black",
                    alpha = 0.9,
                    size = 0.5) + 
-                     geom_point(aes(x = TempExpTime,
-                                    y = average_T50, fill = TempExpTime),
-                                size = 3) +
+    geom_jitter(data = T50metrics, aes(y = T50.mn)) +
+                     
                  scale_fill_manual(values = c("#ea9999", "#e06666", "#cc0000","#990000", "#660000")) +  
                  labs(title = "Effect of Exposure Time on Average T50 Value(old graph)",
                       x = "Exposure Time (Minutes)",
@@ -775,7 +774,7 @@ T50_new_metrics <- psiiht(Temperature=DURIN_data_subset$TempExp, FvFm=DURIN_data
 ### Marine : Plot with the new psiiht function
 
 ```{r}
-summary_stats_new <- T50metrics %>%
+summary_stats_new <- T50_new_metrics %>%
                  group_by(TempExpTime) |>
                  dplyr::summarise(n = n(),  # Calculating sample size n
                            average_T50 = mean(T50.mn),  
